@@ -1,9 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using AutoQueryable.AspNetCore.Filter;
+using AutoQueryable.AspNetCore.Filter.FilterAttributes;
 using AutoQueryable.AspNetCore.Swagger;
+using AutoQueryable.Core.Models;
+using AutoQueryable.Extensions.DependencyInjection;
 using AutoQueryable.Sample.EfCore.Contexts;
 using AutoQueryable.Sample.EfCore.Entities;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json;
@@ -23,16 +28,15 @@ namespace AutoQueryable.Sample.EfCore
                 {
                     settings.ContractResolver = new CamelCasePropertyNamesContractResolver();
                     settings.ReferenceLoopHandling = ReferenceLoopHandling.Ignore;
-                });
-            
-            services.AddSwaggerGen(c =>
-            {
-                c.SwaggerDoc("v1", new Info { Title = "My API", Version = "v1" });
-                c.AddAutoQueryable();
-            });
-
-            services
-                .AddDbContext<AutoQueryableDbContext>(options => options.UseInMemoryDatabase("InMemory"));
+                })
+                .Services
+                .AddSwaggerGen(c =>
+                {
+                    c.SwaggerDoc("v1", new Info {Title = "My API", Version = "v1"});
+                    c.AddAutoQueryable();
+                })
+                .AddDbContext<AutoQueryableDbContext>(options => options.UseInMemoryDatabase("InMemory"))
+                .AddAutoQueryable(settings => { settings.DefaultToTake = 10; });
         }
         
         public void Configure(IApplicationBuilder app)
@@ -86,7 +90,7 @@ namespace AutoQueryable.Sample.EfCore
                     Color = i % 2 == 0 ? "red" : "black",
                     ProductCategory = i % 2 == 0 ? redCategory : blackCategory,
                     ProductModel = model1,
-                    ListPrice = i,
+                    ListPrice = (decimal) (i / 5.0),
                     Name = $"Product {i}",
                     ProductNumber = Guid.NewGuid().ToString(),
                     Rowguid = Guid.NewGuid(),

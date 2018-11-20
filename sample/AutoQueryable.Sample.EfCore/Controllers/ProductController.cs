@@ -1,5 +1,6 @@
 ﻿using System.Linq;
 using AutoQueryable.AspNetCore.Filter.FilterAttributes;
+using AutoQueryable.AspNetCore.Swagger;
 using AutoQueryable.Core.Enums;
 using AutoQueryable.Core.Models;
 using AutoQueryable.Extensions;
@@ -7,6 +8,7 @@ using AutoQueryable.Sample.EfCore.Contexts;
 using AutoQueryable.Sample.EfCore.Dtos;
 using AutoQueryable.Sample.EfCore.Entities;
 using Microsoft.AspNetCore.Mvc;
+
 
 namespace AutoQueryable.Sample.EfCore.Controllers
 {
@@ -28,9 +30,25 @@ namespace AutoQueryable.Sample.EfCore.Controllers
         /// <example>http://localhost:5000/api/products?select=name&top=50&skip=10</example>
         /// <param name="context"></param>
         /// <returns></returns>
-        [AutoQueryable(MaxToTake = 10)]
+        
+        [AutoQueryable]
         [HttpGet]
         public IQueryable Get([FromServices] AutoQueryableDbContext context)
+        {
+            return context.Product;
+        }
+        
+        [AutoQueryable(DisAllowedClauses = ClauseType.Select)]
+        [HttpGet("with_disallow")]
+        public IQueryable GetWithDisallow([FromServices] AutoQueryableDbContext context)
+        {
+            return context.Product;
+        }
+        
+        
+        [AutoQueryable(DefaultToSelect = "name")]
+        [HttpGet("with_default")]
+        public IQueryable GetWithDefault([FromServices] AutoQueryableDbContext context)
         {
             return context.Product;
         }
@@ -41,7 +59,7 @@ namespace AutoQueryable.Sample.EfCore.Controllers
         /// <example>http://localhost:5000/api/products/with_dto_projection?select=name,category.name</example>
         /// <param name="context"></param>
         /// <returns></returns>
-        [AutoQueryable]
+        //[AutoQueryable]
         [HttpGet("with_dto_projection")]
         public IQueryable GetWithDtoProjection([FromServices] AutoQueryableDbContext context)
         {
@@ -53,6 +71,20 @@ namespace AutoQueryable.Sample.EfCore.Controllers
                     Name = p.ProductCategory.Name
                 }
             });
+        }
+        
+        [HttpGet("swagger_without_aq_attr")]
+        [AutoQueryableSwagger]
+        public IQueryable GetSwaggerWithoutAqAttr([FromServices] AutoQueryableDbContext context)
+        {
+            return context.Product.Select(p => new ProductDto
+            {
+                Name = p.Name,
+                Category = new ProductCategoryDto
+                {
+                    Name = p.ProductCategory.Name
+                }
+            }).AutoQueryable(_autoQueryableContext);
         }
 
         /// <summary>

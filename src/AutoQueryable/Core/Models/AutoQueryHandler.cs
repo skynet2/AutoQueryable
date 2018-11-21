@@ -8,6 +8,7 @@ using AutoQueryable.Core.Clauses;
 using AutoQueryable.Core.CriteriaFilters;
 using AutoQueryable.Core.Enums;
 using AutoQueryable.Helpers;
+using AutoQueryable.Models;
 
 namespace AutoQueryable.Core.Models
 {
@@ -18,18 +19,21 @@ namespace AutoQueryable.Core.Models
         private readonly IClauseMapManager _clauseMapManager;
         private readonly IClauseValueManager _clauseValueManager;
         private readonly IAutoQueryableProfile _profile;
+        private readonly StaticMappingDescription _staticMappingDescription;
         public IClauseValueManager ClauseValueManager { get; private set; }
         public IQueryable<dynamic> TotalCountQuery { get; private set; }
         public string QueryString { get; private set; }
 
 
-        public AutoQueryHandler(IQueryStringAccessor queryStringAccessor, ICriteriaFilterManager criteriaFilterManager, IClauseMapManager clauseMapManager, IClauseValueManager clauseValueManager, IAutoQueryableProfile profile)
+        public AutoQueryHandler(IQueryStringAccessor queryStringAccessor, ICriteriaFilterManager criteriaFilterManager, IClauseMapManager clauseMapManager, IClauseValueManager clauseValueManager, IAutoQueryableProfile profile,
+            StaticMappingDescription staticMappingDescription = null)
         {
             _queryStringAccessor = queryStringAccessor;
             _criteriaFilterManager = criteriaFilterManager;
             _clauseMapManager = clauseMapManager;
             _clauseValueManager = clauseValueManager;
             _profile = profile;
+            _staticMappingDescription = staticMappingDescription;
         }
 
         public dynamic GetAutoQuery<T>(IQueryable<T> query) where T : class
@@ -154,6 +158,29 @@ namespace AutoQueryable.Core.Models
             }
         }
 
+        private static bool TryMapStatic(StaticMappingDescription staticMappings
+            , Type targetType, string requestedProperty, out string classPropertyName, out Type newType)
+        {
+            classPropertyName = null;
+            newType = targetType;
+            
+            if (staticMappings == null || staticMappings.Count == 0)
+                return false;
+
+            var targetTypeStr = targetType.FullName.ToLowerInvariant();
+
+            if (!staticMappings.TryGetValue(targetTypeStr, out var propertyDescriptions))
+                return false;
+
+            if (!propertyDescriptions.TryGetValue(requestedProperty, out var propertyDescription))
+                return false;
+
+            classPropertyName = propertyDescription.ClassPropertyName;
+            newType = propertyDescription.Type;
+            
+            return true;
+        }
+        
         private Criteria GetCriteria<T>(string q) where T : class
         {
             var filter = _criteriaFilterManager.FindFilter(q);
@@ -167,8 +194,19 @@ namespace AutoQueryable.Core.Models
             PropertyInfo property = null;
             var columnPath = new List<string>();
             var columns = operands[0].Split('.');
+            
+            var typeInfo = typeof(T);
+            
             foreach (var column in columns)
             {
+                if(TryMapStatic(_staticMappingDescription, typeInfo, column, out var classPropertyName, out var newType))
+                {
+                    columnPath.Add(classPropertyName);
+                    typeInfo = newType;
+                    
+                    continue;
+                }
+                
                 if (property == null)
                 {
                     property = typeof(T).GetProperties().FirstOrDefault(p => p.Name.Equals(column, StringComparison.OrdinalIgnoreCase));

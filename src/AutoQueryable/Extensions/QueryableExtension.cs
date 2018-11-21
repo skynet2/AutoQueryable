@@ -12,6 +12,9 @@ namespace AutoQueryable.Extensions
 
         public static dynamic AutoQueryable<TEntity>(this IQueryable<TEntity> query, IAutoQueryableContext context) where TEntity : class => context.GetAutoQuery(query);
 
+        public static dynamic AutoQueryable<TEntity>(this IQueryable<TEntity> query, IAutoQueryableContext context,
+            string queryString) where TEntity : class => context.GetAutoQuery(query, queryString);
+
         public static IQueryable<T> Call<T>(this IQueryable<T> source, string method, string propertyName)
         {
             var type = typeof(T);
@@ -27,27 +30,29 @@ namespace AutoQueryable.Extensions
         // TODO: Implement WrapWith
         public static dynamic ToAutoQueryListResult<TEntity>(this IQueryable<TEntity> query, IAutoQueryableContext context) where TEntity : class
         {
-            if(!context.ClauseValueManager.WrapWith.Any())
-            {
-                return query.ToList();
-            }
-            if(context.ClauseValueManager.First)
-            {
-                return query.FirstOrDefault();
-            }
-            var result = query.ToList();
-
-            //if (!context.ClauseValueManager.Page.HasValue || context.ClauseValueManager.Page.Value == 0)
-            //{
-            //    return result;
-            //}
-
-            return new PagedResult<TEntity>
-            {
-                TotalCount = context.TotalCountQuery?.Count() ?? result.Count,
-                RowCount = result.Count,
-                Result = result
-            };
+            // todo no usages, not sure about the logic
+            return null;
+//            if(!context.ClauseValueManager.WrapWith.Any())
+//            {
+//                return query.ToList();
+//            }
+//            if(context.ClauseValueManager.First)
+//            {
+//                return query.FirstOrDefault();
+//            }
+//            var result = query.ToList();
+//
+//            //if (!context.ClauseValueManager.Page.HasValue || context.ClauseValueManager.Page.Value == 0)
+//            //{
+//            //    return result;
+//            //}
+//
+//            return new PagedResult<TEntity>
+//            {
+//                TotalCount = context.TotalCountQuery?.Count() ?? result.Count,
+//                RowCount = result.Count,
+//                Result = result
+//            };
         }
         //private static dynamic _getWrappedResult(QueryResult queryResult, IAutoQueryableContext context)
         //{

@@ -14,106 +14,97 @@ namespace AutoQueryable.Core.Models
 {
     public class AutoQueryHandler : IAutoQueryHandler
     {
-        private readonly IQueryStringAccessor _queryStringAccessor;
         private readonly ICriteriaFilterManager _criteriaFilterManager;
         private readonly IClauseMapManager _clauseMapManager;
-        private readonly IClauseValueManager _clauseValueManager;
         private readonly IAutoQueryableProfile _profile;
         private readonly StaticMappingDescription _staticMappingDescription;
-        public IClauseValueManager ClauseValueManager { get; private set; }
-        public IQueryable<dynamic> TotalCountQuery { get; private set; }
-        public string QueryString { get; private set; }
 
-
-        public AutoQueryHandler(IQueryStringAccessor queryStringAccessor, ICriteriaFilterManager criteriaFilterManager, IClauseMapManager clauseMapManager, IClauseValueManager clauseValueManager, IAutoQueryableProfile profile,
+        public AutoQueryHandler(ICriteriaFilterManager criteriaFilterManager, IClauseMapManager clauseMapManager, IAutoQueryableProfile profile,
             StaticMappingDescription staticMappingDescription = null)
         {
-            _queryStringAccessor = queryStringAccessor;
             _criteriaFilterManager = criteriaFilterManager;
             _clauseMapManager = clauseMapManager;
-            _clauseValueManager = clauseValueManager;
             _profile = profile;
             _staticMappingDescription = staticMappingDescription;
         }
 
-        public dynamic GetAutoQuery<T>(IQueryable<T> query) where T : class
+        public dynamic GetAutoQuery<T>(IQueryable<T> query, IQueryStringAccessor queryStringAccessor, IClauseValueManager clauseValueManager) where T : class
         {
-            QueryString = _queryStringAccessor.QueryString;
-            ClauseValueManager = _clauseValueManager;
+            var queryString = queryStringAccessor.QueryString;
             // Reset the TotalCountQuery
-            TotalCountQuery = null;
+            IQueryable<dynamic> totalCountQuery = null;
 
             // No query string, get only selectable columns
-            if (string.IsNullOrEmpty(QueryString))
+            if (string.IsNullOrEmpty(queryString))
             {
-                _clauseValueManager.SetDefaults(typeof(T));
-                TotalCountQuery = query;
-                return GetDefaultSelectableQuery(query);
+                clauseValueManager.SetDefaults(typeof(T));
+                totalCountQuery = query;
+                return GetDefaultSelectableQuery(query, clauseValueManager);
             }
 
-            GetClauses<T>();
-            var criterias = _profile.IsClauseAllowed(ClauseType.Filter) ? GetCriterias<T>().ToList() : null;
+            GetClauses<T>(queryStringAccessor, clauseValueManager);
+            var criterias = _profile.IsClauseAllowed(ClauseType.Filter) ? GetCriterias<T>(queryStringAccessor).ToList() : null;
 
             query = QueryBuilder.AddCriterias(query, criterias, _criteriaFilterManager);
-            TotalCountQuery = query;
-            var queryResult = QueryBuilder.Build(ClauseValueManager, query, _profile);
+            totalCountQuery = query;
+            var queryResult = QueryBuilder.Build(clauseValueManager, query, _profile);
 
  
             return queryResult;
         }
         
-        private void GetClauses<T>() where T : class
+        private void GetClauses<T>(IQueryStringAccessor queryStringAccessor, IClauseValueManager clauseValueManager) where T : class
         {
             _clauseMapManager.Init();
-            foreach (var q in _queryStringAccessor.QueryStringParts.Where(q => !q.IsHandled))
+            foreach (var q in queryStringAccessor.QueryStringParts.Where(q => !q.IsHandled))
             {
                 var clauseQueryFilter = _clauseMapManager.FindClauseQueryFilter(q.Value);
                 if(clauseQueryFilter != null)
                 {
                     var operandValue = _getOperandValue(q.Value, clauseQueryFilter.Alias);
                     var value = clauseQueryFilter.ParseValue(operandValue, typeof(T), _profile);
-                    var propertyInfo = ClauseValueManager.GetType().GetProperty(clauseQueryFilter.ClauseType.ToString());
+                    var propertyInfo = clauseValueManager.GetType().GetProperty(clauseQueryFilter.ClauseType.ToString());
                     if(propertyInfo.PropertyType == typeof(bool))
                     {
                         value = bool.Parse(value.ToString());
                     }
 
-                    propertyInfo.SetValue(ClauseValueManager, value);
+                    propertyInfo.SetValue(clauseValueManager, value);
                 }
             }
             // Set the defaults to start with, then fill/overwrite with the query string values
-            ClauseValueManager.SetDefaults(typeof(T));
+            clauseValueManager.SetDefaults(typeof(T));
 
-            if (ClauseValueManager.PageSize != null)
+            if (clauseValueManager.PageSize != null)
             {
-                ClauseValueManager.Top = ClauseValueManager.PageSize;
+                clauseValueManager.Top = clauseValueManager.PageSize;
             }
 
-            if (ClauseValueManager.Page != null)
+            if (clauseValueManager.Page != null)
             {
                 //this.Logger.Information("Overwriting 'skip' clause value because 'page' is set");
                 // Calculate skip from page if page query param was set
-                ClauseValueManager.Top = ClauseValueManager.Top ?? _profile.DefaultToTake;
-                ClauseValueManager.Skip = (ClauseValueManager.Page - 1) * ClauseValueManager.Top;
+                clauseValueManager.Top = clauseValueManager.Top ?? _profile.DefaultToTake;
+                clauseValueManager.Skip = (clauseValueManager.Page - 1) * clauseValueManager.Top;
             }
 
 
 
-            if (ClauseValueManager.OrderBy == null && _profile.DefaultOrderBy != null)
+            if (clauseValueManager.OrderBy == null && _profile.DefaultOrderBy != null)
             {
-                ClauseValueManager.OrderBy = _profile.DefaultOrderBy;
+                clauseValueManager.OrderBy = _profile.DefaultOrderBy;
             }
 
-            if (ClauseValueManager.Select.Count == 0)
+            if (clauseValueManager.Select.Count == 0)
             {
                 _clauseMapManager.GetClauseQueryFilter(ClauseType.Select).ParseValue("", typeof(T), _profile);
             }
         }
         private string _getOperandValue(string q, string clauseAlias) => Regex.Split(q, clauseAlias, RegexOptions.IgnoreCase)[1];
 
-        public IEnumerable<Criteria> GetCriterias<T>() where T : class
+        public IEnumerable<Criteria> GetCriterias<T>(IQueryStringAccessor queryStringAccessor) where T : class
         {
-            foreach (var qPart in _queryStringAccessor.QueryStringParts.Where(q => !q.IsHandled))
+            foreach (var qPart in queryStringAccessor.QueryStringParts.Where(q => !q.IsHandled))
             {
                 var q = WebUtility.UrlDecode(qPart.Value);
                 
@@ -241,9 +232,9 @@ namespace AutoQueryable.Core.Models
             return criteria;
         }
 
-        private IQueryable<dynamic> GetDefaultSelectableQuery<T>(IQueryable<T> query) where T : class
+        private IQueryable<dynamic> GetDefaultSelectableQuery<T>(IQueryable<T> query, IClauseValueManager clauseValueManager) where T : class
         {
-            var selectColumns = _clauseValueManager.Select;
+            var selectColumns = clauseValueManager.Select;
             query = query.Take(_profile.DefaultToTake);
 
             if (_profile.MaxToTake.HasValue)

@@ -21,16 +21,11 @@ namespace AutoQueryable.UnitTest
         public FilterTest()
         {
             var settings = new AutoQueryableSettings();
-            IAutoQueryableProfile profile = new AutoQueryableProfile(settings);
-            _queryStringAccessor = new SimpleQueryStringAccessor();
-            var selectClauseHandler = new DefaultSelectClauseHandler();
-            var orderByClauseHandler = new DefaultOrderByClauseHandler();
-            var wrapWithClauseHandler = new DefaultWrapWithClauseHandler();
-            var clauseMapManager = new ClauseMapManager(selectClauseHandler, orderByClauseHandler, wrapWithClauseHandler, profile);
-            var clauseValueManager = new ClauseValueManager(selectClauseHandler, orderByClauseHandler, wrapWithClauseHandler, profile);
-            var criteriaFilterManager = new CriteriaFilterManager();
-            var defaultAutoQueryHandler = new AutoQueryHandler(_queryStringAccessor,criteriaFilterManager ,clauseMapManager ,clauseValueManager, profile);
-            _autoQueryableContext = new AutoQueryableContext(defaultAutoQueryHandler);
+            var build = AutoQueryableContextFactory.Create(settings);
+
+            _queryStringAccessor =build.queryStringAccessor;
+
+            _autoQueryableContext = build.queryableContext;
         }
         [Fact]
         public void IdEquals5()

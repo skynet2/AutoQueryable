@@ -34,7 +34,7 @@ namespace AutoQueryable.Extensions
 
         public static void AddProperty(this TypeBuilder typeBuilder, string propName, PropertyInfo propertyInfo)
         {
-            typeBuilder.AddProperty(propName, propertyInfo.Attributes,propertyInfo.PropertyType); 
+            typeBuilder.AddProperty(propName, propertyInfo.Attributes, propertyInfo.PropertyType); 
         }
 
         public static void AddProperty(this TypeBuilder typeBuilder, string propName, Type propertyType)

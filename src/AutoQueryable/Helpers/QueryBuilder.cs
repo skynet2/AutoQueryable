@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Dynamic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using AutoQueryable.Core.Aliases;
 using AutoQueryable.Core.Clauses;
 using AutoQueryable.Core.CriteriaFilters;
 using AutoQueryable.Core.Models;
@@ -14,23 +16,30 @@ namespace AutoQueryable.Helpers
 {
     public static class QueryBuilder
     {
-        public static IQueryable<dynamic> TotalCountQuery { get; private set; }
-
-        public static IQueryable<dynamic> Build<T>(IClauseValueManager clauseValueManager, ICriteriaFilterManager criteriaFilterManager, IQueryable<T> query, ICollection<Criteria> criterias, IAutoQueryableProfile profile) where T : class
+        public static IQueryable<T> AddCriterias<T>(IQueryable<T> query, ICollection<Criteria> criterias, ICriteriaFilterManager criteriaFilterManager) where T : class
         {
             if (criterias != null && criterias.Any())
             {
-                query = _addCriterias(criteriaFilterManager, query, criterias);
+                return _addCriterias(criteriaFilterManager, query, criterias);
             }
+
+            return query;
+        }
+
+        public static dynamic Build<T>(IClauseValueManager clauseValueManager, IQueryable<T> query, IAutoQueryableProfile profile) where T : class
+        {
+            var totalCountQuery = query;
             query = _addOrderBy(query, clauseValueManager.OrderBy, profile);
 
-            TotalCountQuery = query;
             if(clauseValueManager.First)
             {
-                query = query.Take(1);
-            }else{
-                query = _handlePaging(clauseValueManager, query, profile);
+                return query.FirstOrDefault();
             }
+            if(clauseValueManager.Last)
+            {
+                return query.LastOrDefault();
+            }
+            query = _handlePaging(clauseValueManager, query, profile);
             //if (profile?.MaxToTake != null)
             //{
             //    queryProjection = profile.UseBaseType ? ((IQueryable<T>)queryProjection).Take(profile.MaxToTake.Value) : queryProjection.Take(profile.MaxToTake.Value);
@@ -50,7 +59,7 @@ namespace AutoQueryable.Helpers
                 }
             }
 
-            return queryProjection;
+            return queryProjection.HandleWrapping(clauseValueManager, totalCountQuery);
         }
 
         private static IQueryable<T> _handlePaging<T>(IClauseValueManager clauseValueManager, IQueryable<T> query, IAutoQueryableProfile profile) where T : class
@@ -89,6 +98,31 @@ namespace AutoQueryable.Helpers
             }
 
             return query;
+        }
+        
+        public static dynamic HandleWrapping<TEntity>(this IQueryable<TEntity> query, IClauseValueManager clauseValueManager, IQueryable<TEntity> totalCountQuery) where TEntity : class
+        {
+            if(!clauseValueManager.WrapWith.Any() || clauseValueManager.First)
+            {
+                return query;
+            }
+            var result = query;
+            
+            var wrapper = new ExpandoObject() as IDictionary<string, Object>;
+            wrapper.Add("result", result);
+            foreach (string wrapperPart in clauseValueManager.WrapWith)
+            {
+                if (wrapperPart == WrapperAlias.Count)
+                {
+                    wrapper.Add(WrapperAlias.Count, result.Count());
+                }
+                else if (wrapperPart == WrapperAlias.TotalCount)
+                {
+                    wrapper.Add(WrapperAlias.TotalCount, totalCountQuery.Count());
+                }
+            }
+
+            return wrapper;
         }
 
         private static Expression MakeLambda(Expression parameter, Expression predicate)
@@ -177,9 +211,37 @@ namespace AutoQueryable.Helpers
             Expression whereExpression = null;
             foreach (var c in criterias)
             {
-                var expression = BuildWhereExpression(criteriaFilterManager, parentEntity, c, c.ColumnPath.ToArray());
+                if (c.Criterias != null && c.Criterias.Count > 0)
+                {
+                    if (c.Criterias.Count == 1)
+                    {
+                        var expression = BuildWhereExpression(criteriaFilterManager, parentEntity, c.Criterias.First(), c.Criterias.First().ColumnPath.ToArray());
+                        whereExpression = whereExpression == null ? expression : Expression.AndAlso(whereExpression, expression);
+                    }
 
-                whereExpression = whereExpression == null ? expression : Expression.AndAlso(whereExpression, expression);
+                    List<Expression> expressions = new List<Expression>();
+                    foreach (var criteria in c.Criterias)
+                    {
+                        expressions.Add(BuildWhereExpression(criteriaFilterManager, parentEntity, criteria, criteria.ColumnPath.ToArray()));
+                    }
+                    Expression currentExpression = null;
+                    foreach (var expression in expressions)
+                    {
+                        if (currentExpression == null)
+                        {
+                            currentExpression = expression;
+                            continue;
+                        }
+                        currentExpression = Expression.OrElse(expression, currentExpression);
+                    }
+
+                    whereExpression = whereExpression == null ? currentExpression : Expression.AndAlso(whereExpression, currentExpression); // TODO
+                }
+                else
+                {
+                    var expression = BuildWhereExpression(criteriaFilterManager, parentEntity, c, c.ColumnPath.ToArray());
+                    whereExpression = whereExpression == null ? expression : Expression.AndAlso(whereExpression, expression);
+                }
             }
 
             return source.Where(Expression.Lambda<Func<T, bool>>(whereExpression, parentEntity));

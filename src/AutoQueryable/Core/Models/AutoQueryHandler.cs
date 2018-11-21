@@ -31,14 +31,11 @@ namespace AutoQueryable.Core.Models
         public dynamic GetAutoQuery<T>(IQueryable<T> query, IQueryStringAccessor queryStringAccessor, IClauseValueManager clauseValueManager) where T : class
         {
             var queryString = queryStringAccessor.QueryString;
-            // Reset the TotalCountQuery
-            IQueryable<dynamic> totalCountQuery = null;
 
             // No query string, get only selectable columns
             if (string.IsNullOrEmpty(queryString))
             {
                 clauseValueManager.SetDefaults(typeof(T));
-                totalCountQuery = query;
                 return GetDefaultSelectableQuery(query, clauseValueManager);
             }
 
@@ -46,9 +43,7 @@ namespace AutoQueryable.Core.Models
             var criterias = _profile.IsClauseAllowed(ClauseType.Filter) ? GetCriterias<T>(queryStringAccessor).ToList() : null;
 
             query = QueryBuilder.AddCriterias(query, criterias, _criteriaFilterManager);
-            totalCountQuery = query;
             var queryResult = QueryBuilder.Build(clauseValueManager, query, _profile);
-
  
             return queryResult;
         }
